@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define BUFFER_LEN 1024
 
@@ -15,6 +16,7 @@ int main(int argc, char *argv[]) {
     char *p;
     char buffer[BUFFER_LEN];
     char temp[BUFFER_LEN];
+    char path[BUFFER_LEN];
 
     // 开始主循环
     while (1) {
@@ -23,6 +25,7 @@ int main(int argc, char *argv[]) {
         // 清空缓冲区
         bufferClear(buffer, BUFFER_LEN);
         bufferClear(temp, BUFFER_LEN);
+        bufferClear(path, BUFFER_LEN);
         // 读取一行，如果溢出了就报错
         if (readLine(buffer, BUFFER_LEN)) {
             // 拷贝原始输入
@@ -36,9 +39,11 @@ int main(int argc, char *argv[]) {
             } else if (!strcmp(p, "ls")) {
                 mysys(buffer);
             } else if (!strcmp(p, "cd")) {
-                // TODO
+                p = strtok(NULL, "");
+                if (chdir(p) < 0) printf("no such directory\n");
             } else if (!strcmp(p, "pwd")) {
-                // TODO
+                getcwd(path, BUFFER_LEN);
+                printf("%s\n", path);
             } else if (!strcmp(p, "exit")) {
                 // 退出程序
                 return 0;
