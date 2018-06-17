@@ -20,42 +20,53 @@ char get_item(char *, int *);
 //放入一个 item 并且移动 in 指针
 void put_item(char *, int *, char item);
 
-// 临界区
-pthread_mutex_t mutex1, mutex2;
-// 条件变量
-pthread_cond_t wait_empty_buffer1, wait_empty_buffer2;
-pthread_cond_t wait_full_buffer1, wait_full_buffer2;
+// 信号量
+typedef struct {
+    int value;
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+} sema_t;
+
+// 信号量初始化
+void sema_init(sema_t *, int);
+// 等待条件变量
+void sema_wait(sema_t *);
+// 唤醒等待条件变量的线程
+void sema_signal(sema_t *);
 
 // 三个子线程
 void *producer_func(void *);
 void *calculator_func(void *);
 void *consumer_func(void *);
 
+// 定义信号量
+sema_t mutex_sema1, mutex_sema2;
+sema_t empty_buffer_sema1, empty_buffer_sema2;
+sema_t full_buffer_sema1, full_buffer_sema2;
+
 int main(int argc, char *argv[]) {
-    // 线程 tid
+    // 线程标识符
     pthread_t calculator_thread, consumer_thread;
 
-    // 初始化条件变量
-    pthread_mutex_init(&mutex1, NULL);
-    pthread_cond_init(&wait_empty_buffer1, NULL);
-    pthread_cond_init(&wait_full_buffer1, NULL);
-    pthread_mutex_init(&mutex2, NULL);
-    pthread_cond_init(&wait_empty_buffer2, NULL);
-    pthread_cond_init(&wait_full_buffer2, NULL);
+    // 初始化信号量
+    sema_init(&mutex_sema1, 1);
+    sema_init(&empty_buffer_sema1, 1);
+    sema_init(&full_buffer_sema1, 0);
+    sema_init(&mutex_sema2, 1);
+    sema_init(&empty_buffer_sema2, 1);
+    sema_init(&full_buffer_sema2, 0);
 
-    // 创建计算者和消费者线程
+    // 创建计算者和消费者进程
     pthread_create(&calculator_thread, NULL, &calculator_func, NULL);
     pthread_create(&consumer_thread, NULL, &consumer_func, NULL);
-
     // 执行生产者线程
     producer_func(NULL);
 
-    // 等待计算者和消费者线程执行完毕
+    // 等待线程执行完毕
     pthread_join(calculator_thread, NULL);
     pthread_join(consumer_thread, NULL);
 
     printf("\n");
-
     return 0;
 }
 
@@ -79,52 +90,64 @@ void put_item(char *buffer, int *in, char item) {
     *in = (*in + 1) % BUFFER_LEN;
 }
 
+void sema_init(sema_t *sema, int value) {
+    sema->value = value;
+    pthread_mutex_init(&sema->mutex, NULL);
+    pthread_cond_init(&sema->cond, NULL);
+}
+
+void sema_wait(sema_t *sema) {
+    pthread_mutex_lock(&sema->mutex);
+    sema->value--;
+    while (sema->value < 0)
+        pthread_cond_wait(&sema->cond, &sema->mutex);
+    pthread_mutex_unlock(&sema->mutex);
+}
+
+void sema_signal(sema_t *sema) {
+    pthread_mutex_lock(&sema->mutex);
+    sema->value++;
+    pthread_cond_signal(&sema->cond);
+    pthread_mutex_unlock(&sema->mutex);
+}
+
 void *producer_func(void *args) {
     for (int i = 0; i < CHAR_NUM; i++) {
-        // 加锁
-        pthread_mutex_lock(&mutex1);
-        // 如果缓冲区是满的，就等待一个空的缓冲区
-        while (buffer_is_full(in1, out1))
-            pthread_cond_wait(&wait_empty_buffer1, &mutex1);
+        sema_wait(&empty_buffer_sema1);
+        sema_wait(&mutex_sema1);
         char item = START_CHAR + i;
         put_item(buffer1, &in1, item);
-        // printf("produce item: %c\n", item);
-        // 改变条件变量并且解锁
-        pthread_cond_signal(&wait_full_buffer1);
-        pthread_mutex_unlock(&mutex1);
+        sema_signal(&mutex_sema1);
+        sema_signal(&full_buffer_sema1);
     }
     return NULL;
 }
 
 void *calculator_func(void *args) {
     for (int i = 0; i < CHAR_NUM; i++) {
-        pthread_mutex_lock(&mutex1);
-        while (buffer_is_empty(in1, out1))
-            pthread_cond_wait(&wait_full_buffer1, &mutex1);
+        sema_wait(&full_buffer_sema1);
+        sema_wait(&mutex_sema1);
         char item = get_item(buffer1, &out1);
-        pthread_cond_signal(&wait_empty_buffer1);
-        pthread_mutex_unlock(&mutex1);
+        sema_signal(&mutex_sema1);
+        sema_signal(&empty_buffer_sema1);
 
-        pthread_mutex_lock(&mutex2);
-        while (buffer_is_full(in2, out2))
-            pthread_cond_wait(&wait_empty_buffer2, &mutex2);
+        sema_wait(&empty_buffer_sema2);
+        sema_wait(&mutex_sema2);
         put_item(buffer2, &in2, item - 32);
-        // printf("calculate item: %c to %c\n", item, item - 21);
-        pthread_cond_signal(&wait_full_buffer2);
-        pthread_mutex_unlock(&mutex2);
+        sema_signal(&mutex_sema2);
+        sema_signal(&full_buffer_sema2);
     }
     return NULL;
 }
 
 void *consumer_func(void *args) {
     for (int i = 0; i < CHAR_NUM; i++) {
-        pthread_mutex_lock(&mutex2);
-        while (buffer_is_empty(in2, out2))
-            pthread_cond_wait(&wait_full_buffer2, &mutex2);
+        sema_wait(&full_buffer_sema2);
+        sema_wait(&mutex_sema2);
         char item = get_item(buffer2, &out2);
         printf("%c ", item);
-        pthread_cond_signal(&wait_empty_buffer2);
-        pthread_mutex_unlock(&mutex2);
+        sema_signal(&mutex_sema2);
+        sema_signal(&empty_buffer_sema2);
     }
     return NULL;
 }
