@@ -33,17 +33,23 @@ int main(int argc, char *argv[]) {
             // 分割参数
             p = strtok(temp, " ");
             // 根据指令的不同做不同的事情
-            if (!strcmp(p, "cd")) {
-                p = strtok(NULL, "");
-                if (chdir(p) < 0) printf("no such directory\n");
-            } else if (!strcmp(p, "pwd")) {
-                getcwd(path, BUFFER_LEN);
-                printf("%s\n", path);
-            } else if (!strcmp(p, "exit")) {
-                // 退出程序
-                return 0;
-            } else {
-                mysys(buffer);
+            if (p) {
+                if (!strcmp(p, "cd")) {
+                    p = strtok(NULL, "");
+                    if (chdir(p) < 0) printf("no such directory\n");
+                } else if (!strcmp(p, "pwd")) {
+                    getcwd(path, BUFFER_LEN);
+                    printf("%s\n", path);
+                } else if (!strcmp(p, "exit")) {
+                    // 退出程序
+                    return 0;
+                } else if (!strcmp(p, "echo")) {
+                    mysys(buffer);
+                } else if (!strcmp(p, "ls")) {
+                    mysys(buffer);
+                } else {
+                    printf("unknown instructions!\n");
+                }
             }
         } else {
             printf("You can't input so much char at one time!\n");
