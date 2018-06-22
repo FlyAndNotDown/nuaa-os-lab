@@ -2,21 +2,33 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #define BUFFER_LEN 1024
 
+#define RE_NO 0
+#define RE_OUT 1
+#define RE_IN 2
+#define RE_ALL 3
+
 // 读入一行进入缓冲区
 int readLine(char *, int);
-// 伪造system函数
-int mysys(char *);
 // 清空缓冲区
 void bufferClear(char *, int);
+// 伪造system函数
+int mysys(char *);
+// 判断是否要重定向
+int needRedirect(char *);
+// 执行指令
+void doSomething(char *);
+// 处理字符串中的输出重定向
+char *dealReOutStr(char *);
+// 处理字符串中的输入重定向
+char *dealReInStr(char *);
 
 int main(int argc, char *argv[]) {
-    char *p;
     char buffer[BUFFER_LEN];
-    char temp[BUFFER_LEN];
-    char path[BUFFER_LEN];
 
     // 开始主循环
     while (1) {
@@ -24,57 +36,15 @@ int main(int argc, char *argv[]) {
         printf("$");
         // 清空缓冲区
         bufferClear(buffer, BUFFER_LEN);
-        bufferClear(temp, BUFFER_LEN);
-        bufferClear(path, BUFFER_LEN);
         // 读取一行，如果溢出了就报错
         if (readLine(buffer, BUFFER_LEN)) {
-            // 拷贝原始输入
-            strcpy(temp, buffer);
-            // 分割参数
-            p = strtok(temp, " ");
-            // 根据指令的不同做不同的事情
-            if (p) {
-                if (!strcmp(p, "cd")) {
-                    p = strtok(NULL, "");
-                    if (chdir(p) < 0) printf("no such directory\n");
-                } else if (!strcmp(p, "pwd")) {
-                    getcwd(path, BUFFER_LEN);
-                    printf("%s\n", path);
-                } else if (!strcmp(p, "exit")) {
-                    // 退出程序
-                    return 0;
-                } else if (!strcmp(p, "echo")) {
-                    mysys(buffer);
-                } else if (!strcmp(p, "ls")) {
-                    mysys(buffer);
-                } else {
-                    printf("unknown instructions!\n");
-                }
-            }
+            // 执行指令
+            doSomething(buffer);
         } else {
             printf("You can't input so much char at one time!\n");
         }
     }
 
-    return 0;
-}
-
-int mysys(char *arg) {
-    // fork一个子进程
-    pid_t fpid = fork();
-    if (fpid < 0) {
-        // 如果获取子进程失败
-        return -1;
-    } else if (fpid == 0) {
-        // 如果是子进程
-        if (execl("/bin/sh", "sh", "-c", arg, (char *) 0) < 0) {
-            return 127;
-        }
-    } else {
-        // 等待子进程结束
-        wait(NULL);
-        return 0;
-    }
     return 0;
 }
 
@@ -95,4 +65,162 @@ int readLine(char *buffer, int length) {
 
 void bufferClear(char *buffer, int length) {
     for (int i = 0; i < length; i++) buffer[i] = '\0';
+}
+
+int needRedirect(char *str) {
+    // 寻找 < 符号和 > 符号
+    int findLeft = 0;
+    int findRight = 0;
+    for (int i = 0; i < strlen(str); i++) {
+        if (str[i] == '<') findLeft = 1;
+        if (str[i] == '>') findRight = 1;
+    }
+    if (!findLeft && findRight) return RE_OUT;
+    if (findLeft && !findRight) return RE_IN;
+    if (findLeft && findRight) return RE_ALL;
+    return RE_NO;
+}
+
+void doSomething(char *str) {
+    // 缓冲区
+    char buffer[BUFFER_LEN];
+    char str2[BUFFER_LEN];
+    strcpy(str2, str);
+    char path[BUFFER_LEN];
+    char *p = NULL;
+    char *name = NULL;
+    // 文件描述符
+    int fd;
+
+    // 创建子进程
+    pid_t pid = fork();
+
+    if (pid == 0) {
+        if (strcmp(str, "")) {
+            // 判断指令类型
+            int type = needRedirect(str);
+            // 根据指令情况进行处理
+            switch (type) {
+                case RE_NO:
+                    // 拷贝输入
+                    strcpy(buffer, str);
+                    // 分割参数
+                    p = strtok(buffer, " ");
+                    // 根据指令的不同做不同的事情
+                    if (p) {
+                        if (!strcmp(p, "cd")) {
+                            p = strtok(NULL, "");
+                            if (chdir(p) < 0) printf("no such directory\n");
+                        } else if (!strcmp(p, "pwd")) {
+                            getcwd(path, BUFFER_LEN);
+                            printf("%s\n", path);
+                        } else if (!strcmp(p, "exit")) {
+                            // 退出程序
+                            exit(0);
+                        } else {
+                            mysys(str);
+                        }
+                    }
+                    break;
+                case RE_ALL:
+                case RE_OUT:
+                    // 获取重定向文件名
+                    name = dealReOutStr(str2);
+                    printf("name: %s\n", name);
+                    printf("str: %s\n", str2);
+                    if (name) {
+                        // 执行重定向
+                        fd = open(name, O_CREAT | O_RDWR, 0666);
+                        dup2(1, 4);
+                        dup2(fd, 1);
+                        close(fd);
+                        // 递归
+                        doSomething(str2);
+                        // 撤销重定向
+                        dup2(4, 1);
+                    }
+                    break;
+                case RE_IN:
+                    name = dealReInStr(str2);
+                    if (name) {
+                        pid = fork();
+                        fd = open(name, O_CREAT | O_RDWR, 0666);
+                        dup2(fd, 0);
+                        close(fd);
+                        doSomething(str2);
+                    }
+                    break;
+            }
+        }
+    } else {
+        waitpid(pid, NULL, 0);
+    }
+}
+
+char *dealReOutStr(char *str) {
+    int symbol = -1;
+    int i, j, end;
+    char *name = (char *) malloc(sizeof(char) * BUFFER_LEN);
+    for (i = 0; i < strlen(str); i++) {
+        if (str[i] == '>') {
+            symbol = i;
+            break;
+        }
+    }
+
+    if (symbol < 0 || symbol == strlen(str) - 1) return NULL;
+    // 寻找 > 符号后面的第一个单词
+    if (str[symbol + 1] == ' ') {
+        end = symbol + 2;
+        for (i = symbol + 2; i < strlen(str); i++) {
+            if (str[i] == ' ') break;
+            end++;
+        }
+        // 拷贝到name
+        strncpy(name, &str[symbol + 2], end - (symbol + 2));
+        // 从原来的指令中删除重定向
+        for (i = 0; i < end - symbol; i++) {
+            for (j = symbol; j < strlen(str) - i - 1; j++) {
+                str[j] = str[j + 1];
+            }
+            str[j] = '\0';
+        }
+    } else {
+        end = symbol + 1;
+        for (i = symbol + 1; i < strlen(str); i++) {
+            if (str[i] == ' ') break;
+            end++;
+        }
+        strncpy(name, &str[symbol + 1], end - (symbol + 1));
+        for (i = 0; i < end - symbol; i++) {
+            for (j = symbol; j < strlen(str) - i - 1; j++) {
+                str[j] = str[j + 1];
+            }
+            str[j] = '\0';
+        }
+    }
+    return name;
+}
+
+char *dealReInStr(char *str) {
+    return NULL;
+}
+
+int mysys(char *arg) {
+    // fork一个子进程
+    pid_t fpid = fork();
+    if (fpid < 0) {
+        // 如果获取子进程失败
+        return -1;
+    } else if (fpid == 0) {
+        // 如果是子进程
+        if (execl("/bin/sh", "sh", "-c", arg, (char *) 0) < 0) {
+            return 127;
+        }
+    } else {
+        // 等待子进程结束
+        waitpid(fpid, NULL, 0);
+        return 0;
+    }
+    return 0;
 }

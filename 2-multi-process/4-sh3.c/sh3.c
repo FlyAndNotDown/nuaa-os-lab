@@ -43,12 +43,8 @@ int main(int argc, char *argv[]) {
                 } else if (!strcmp(p, "exit")) {
                     // 退出程序
                     return 0;
-                } else if (!strcmp(p, "echo")) {
-                    mysys(buffer);
-                } else if (!strcmp(p, "ls")) {
-                    mysys(buffer);
                 } else {
-                    printf("unknown instructions!\n");
+                    mysys(buffer);
                 }
             }
         } else {
