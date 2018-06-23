@@ -142,7 +142,6 @@ void doSomething(char *str) {
                 case RE_IN:
                     name = dealReInStr(str2);
                     if (name) {
-                        pid = fork();
                         fd = open(name, O_CREAT | O_RDWR, 0666);
                         dup2(fd, 0);
                         close(fd);
