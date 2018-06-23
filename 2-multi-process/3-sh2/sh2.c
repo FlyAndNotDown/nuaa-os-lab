@@ -187,6 +187,36 @@ char *dealReOutStr(char *str) {
     return name;
 }
 
+char *dealReInStr(char *str) {
+    char *name = (char *) malloc(sizeof(char) * BUFFER_LEN);
+    int end;
+
+    int symbol = findCharInStr(str, '<');
+    if (symbol < 0 || symbol == strlen(str) - 1) return NULL;
+
+    // 寻找 < 符号后面的第一个单词
+    if (str[symbol + 1] == ' ') {
+        end = symbol + 2;
+        for (int i = symbol + 2; i < strlen(str); i++) {
+            if (str[i] == ' ') break;
+            end++;
+        }
+        // 拷贝到name
+        strncpy(name, &str[symbol + 2], end - (symbol + 2));
+        // 从原来的指令中删除重定向
+        deleteFromStr(str, symbol, end);
+    } else {
+        end = symbol + 1;
+        for (int i = symbol + 1; i < strlen(str); i++) {
+            if (str[i] == ' ') break;
+            end++;
+        }
+        strncpy(name, &str[symbol + 1], end - (symbol + 1));
+        deleteFromStr(str, symbol, end);
+    }
+    return name;
+}
+
 void deleteFromStr(char *str, int start, int end) {
     int length = end - start;
     if (length > 0) {
@@ -207,10 +237,6 @@ int findCharInStr(char *str, char c) {
         }
     }
     return symbol;
-}
-
-char *dealReInStr(char *str) {
-    return NULL;
 }
 
 int mysys(char *arg) {
