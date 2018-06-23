@@ -26,6 +26,10 @@ void doSomething(char *);
 char *dealReOutStr(char *);
 // 处理字符串中的输入重定向
 char *dealReInStr(char *);
+// 寻找特定字符在字符串中的位置
+int findCharInStr(char *, char);
+// 删除字符串的一部分
+void deleteFromStr(char *, int, int);
 
 int main(int argc, char *argv[]) {
     char buffer[BUFFER_LEN];
@@ -126,18 +130,13 @@ void doSomething(char *str) {
                 case RE_OUT:
                     // 获取重定向文件名
                     name = dealReOutStr(str2);
-                    printf("name: %s\n", name);
-                    printf("str: %s\n", str2);
                     if (name) {
                         // 执行重定向
                         fd = open(name, O_CREAT | O_RDWR, 0666);
-                        dup2(1, 4);
                         dup2(fd, 1);
                         close(fd);
                         // 递归
                         doSomething(str2);
-                        // 撤销重定向
-                        dup2(4, 1);
                     }
                     break;
                 case RE_IN:
@@ -152,54 +151,62 @@ void doSomething(char *str) {
                     break;
             }
         }
+        exit(0);
     } else {
         waitpid(pid, NULL, 0);
     }
 }
 
 char *dealReOutStr(char *str) {
-    int symbol = -1;
-    int i, j, end;
     char *name = (char *) malloc(sizeof(char) * BUFFER_LEN);
-    for (i = 0; i < strlen(str); i++) {
-        if (str[i] == '>') {
-            symbol = i;
-            break;
-        }
-    }
+    int end;
 
+    int symbol = findCharInStr(str, '>');
     if (symbol < 0 || symbol == strlen(str) - 1) return NULL;
+
     // 寻找 > 符号后面的第一个单词
     if (str[symbol + 1] == ' ') {
         end = symbol + 2;
-        for (i = symbol + 2; i < strlen(str); i++) {
+        for (int i = symbol + 2; i < strlen(str); i++) {
             if (str[i] == ' ') break;
             end++;
         }
         // 拷贝到name
         strncpy(name, &str[symbol + 2], end - (symbol + 2));
         // 从原来的指令中删除重定向
-        for (i = 0; i < end - symbol; i++) {
-            for (j = symbol; j < strlen(str) - i - 1; j++) {
-                str[j] = str[j + 1];
-            }
-            str[j] = '\0';
-        }
+        deleteFromStr(str, symbol, end);
     } else {
         end = symbol + 1;
-        for (i = symbol + 1; i < strlen(str); i++) {
+        for (int i = symbol + 1; i < strlen(str); i++) {
             if (str[i] == ' ') break;
             end++;
         }
         strncpy(name, &str[symbol + 1], end - (symbol + 1));
-        for (i = 0; i < end - symbol; i++) {
-            for (j = symbol; j < strlen(str) - i - 1; j++) {
-                str[j] = str[j + 1];
-            }
-            str[j] = '\0';
-        }
+        deleteFromStr(str, symbol, end);
     }
     return name;
+}
+
+void deleteFromStr(char *str, int start, int end) {
+    int length = end - start;
+    if (length > 0) {
+        for (int i = start; i < strlen(str) - 1; i++) str[i] = str[i + 1];
+        str[strlen(str) - 1] = '\0';
+        deleteFromStr(str, start, end - 1);
+    }
+}
+
+int findCharInStr(char *str, char c) {
+    int symbol = -1;
+    int i, j, end;
+    char *name = (char *) malloc(sizeof(char) * BUFFER_LEN);
+    for (i = 0; i < strlen(str); i++) {
+        if (str[i] == c) {
+            symbol = i;
+            break;
+        }
+    }
+    return symbol;
 }
 
 char *dealReInStr(char *str) {
