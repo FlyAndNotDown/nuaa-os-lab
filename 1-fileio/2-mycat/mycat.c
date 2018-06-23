@@ -5,7 +5,7 @@
 
 int main(int argc, char *argv[]) {
 	char buffer[1024];
-	int file;
+	int file, count;
 
 	// 打开文件
     file = open(argv[1], O_RDONLY);
@@ -13,8 +13,8 @@ int main(int argc, char *argv[]) {
 		printf("Can't open the file %s", argv[1]);
 
 	// 不断输出
-    while (read(file, buffer, 1023) > 0) {
-    	printf("%s", buffer);
+    while ((count = read(file, buffer, 1023)) > 0) {
+    	write(1, buffer, count);
     }
 
 	// 关闭文件
