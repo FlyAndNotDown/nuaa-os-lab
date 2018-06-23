@@ -1,21 +1,23 @@
 #include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 int main(int argc, char *argv[]) {
-	FILE *file;
 	char buffer[1024];
+	int file;
 
 	// 打开文件
-    file = fopen(argv[1], "r");
-	if (file == NULL)
+    file = open(argv[1], O_RDONLY);
+	if (file < 0)
 		printf("Can't open the file %s", argv[1]);
 
 	// 不断输出
-    while (feof(file) == 0) {
-        fgets(buffer, 1024, file);
-        printf("%s", buffer);
+    while (read(file, buffer, 1023) > 0) {
+    	printf("%s", buffer);
     }
 
 	// 关闭文件
-	fclose(file);
+	close(file);
     return 0;
 }
