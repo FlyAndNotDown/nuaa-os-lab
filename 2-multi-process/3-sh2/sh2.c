@@ -95,64 +95,66 @@ void doSomething(char *str) {
     char *name = NULL;
     // 文件描述符
     int fd;
+    // 子进程
+    pid_t pid;
 
-    // 创建子进程
-    pid_t pid = fork();
-
-    if (pid == 0) {
-        if (strcmp(str, "")) {
-            // 判断指令类型
-            int type = needRedirect(str);
-            // 根据指令情况进行处理
-            switch (type) {
-                case RE_NO:
-                    // 拷贝输入
-                    strcpy(buffer, str);
-                    // 分割参数
-                    p = strtok(buffer, " ");
-                    // 根据指令的不同做不同的事情
-                    if (p) {
-                        if (!strcmp(p, "cd")) {
-                            p = strtok(NULL, "");
-                            if (chdir(p) < 0) printf("no such directory\n");
-                        } else if (!strcmp(p, "pwd")) {
-                            getcwd(path, BUFFER_LEN);
-                            printf("%s\n", path);
-                        } else if (!strcmp(p, "exit")) {
-                            // 退出程序
-                            exit(0);
-                        } else {
-                            mysys(str);
-                        }
+    if (strcmp(str, "")) {
+        // 判断指令类型
+        int type = needRedirect(str);
+        // 根据指令情况进行处理
+        switch (type) {
+            case RE_NO:
+                // 拷贝输入
+                strcpy(buffer, str);
+                // 分割参数
+                p = strtok(buffer, " ");
+                // 根据指令的不同做不同的事情
+                if (p) {
+                    if (!strcmp(p, "cd")) {
+                        p = strtok(NULL, "");
+                        if (chdir(p) < 0) printf("no such directory\n");
+                    } else if (!strcmp(p, "pwd")) {
+                        getcwd(path, BUFFER_LEN);
+                        printf("%s\n", path);
+                    } else if (!strcmp(p, "exit")) {
+                        // 退出程序
+                        exit(0);
+                    } else {
+                        mysys(str);
                     }
-                    break;
-                case RE_ALL:
-                case RE_OUT:
-                    // 获取重定向文件名
-                    name = dealReOutStr(str2);
-                    if (name) {
+                }
+                break;
+            case RE_ALL:
+            case RE_OUT:
+                // 获取重定向文件名
+                name = dealReOutStr(str2);
+                if (name) {
+                    pid = fork();
+                    if (pid == 0) {
                         // 执行重定向
                         fd = open(name, O_CREAT | O_RDWR, 0666);
                         dup2(fd, 1);
                         close(fd);
                         // 递归
                         doSomething(str2);
-                    }
-                    break;
-                case RE_IN:
-                    name = dealReInStr(str2);
-                    if (name) {
+                        exit(0);
+                    } else waitpid(pid, NULL, 0);
+                }
+                break;
+            case RE_IN:
+                name = dealReInStr(str2);
+                if (name) {
+                    pid = fork();
+                    if (pid == 0) {
                         fd = open(name, O_CREAT | O_RDWR, 0666);
                         dup2(fd, 0);
                         close(fd);
                         doSomething(str2);
-                    }
-                    break;
-            }
+                        exit(0);
+                    } else waitpid(pid, NULL, 0);
+                }
+                break;
         }
-        exit(0);
-    } else {
-        waitpid(pid, NULL, 0);
     }
 }
 
